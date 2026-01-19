@@ -27,34 +27,59 @@ public extension GrammarMaskedLogitProcessor {
             configurations.tokenizerData
         )
         
-        // First, try to get vocab size from model config
-        var vocabSize = modelConfig?.vocabSize.integer(or: 0) ?? 0
+        // Collect all vocab entries and find the maximum index
+        let vocabDict = tokenizerData.model.vocab.dictionary(or: [:])
+        let maxVocabIndex = vocabDict.values.compactMap { $0.integer() }.max() ?? -1
         
-        // If model config doesn't have vocab size, determine it from tokenizer data
-        if vocabSize == 0 {
-            // Find the maximum index in the vocab dictionary
-            let vocabDict = tokenizerData.model.vocab.dictionary(or: [:])
-            let maxVocabIndex = vocabDict.values.compactMap { $0.integer() }.max() ?? -1
-            
-            // Check added tokens for even higher indices
-            let addedTokens = tokenizerData.addedTokens.array(or: [])
-            let maxAddedTokenIndex = addedTokens.compactMap { $0.id.integer() }.max() ?? -1
-            
-            // Use the maximum index + 1 as vocab size
-            vocabSize = max(maxVocabIndex, maxAddedTokenIndex) + 1
+        // Check added tokens for even higher indices
+        let addedTokens = tokenizerData.addedTokens.array(or: [])
+        let maxAddedTokenIndex = addedTokens.compactMap { $0.id.integer() }.max() ?? -1
+        
+        // Calculate vocab size from tokenizer data
+        let calculatedVocabSize = max(maxVocabIndex, maxAddedTokenIndex) + 1
+        
+        // Try multiple sources for vocab size, in order of preference:
+        // 1. Tokenizer config (most reliable for actual model vocab size)
+        // 2. Model config
+        // 3. Calculated from tokenizer data
+        var vocabSize = 0
+        
+        // First, try tokenizer config vocab_size
+        if let tokenizerConfig = tokenizerConfig {
+            vocabSize = tokenizerConfig.vocabSize.integer(or: 0)
+        }
+        
+        // If not found, try model config
+        if vocabSize == 0, let modelConfig = modelConfig {
+            vocabSize = modelConfig.vocabSize.integer(or: 0)
+        }
+        
+        // Use calculated size as final fallback, but always ensure we're at least
+        // as large as the calculated size (in case config is outdated)
+        vocabSize = max(vocabSize, calculatedVocabSize)
+        
+        // Safety check: ensure vocab size is reasonable
+        if vocabSize == 0 || vocabSize > 1_000_000 {
+            vocabSize = calculatedVocabSize
         }
         
         var vocab = Array(repeating: "", count: vocabSize)
         
-        for (key, value) in tokenizerData.model.vocab.dictionary(or: [:]) {
+        for (key, value) in vocabDict {
             if let index = value.integer(), index < vocabSize {
                 vocab[index] = key.string
             }
         }
         
-        for value in tokenizerData.addedTokens.array(or: []) {
-            if let index = value.id.integer(), let token = value.content.string(), vocab.indices.contains(index) {
-                vocab[index] = token
+        for value in addedTokens {
+            if let index = value.id.integer(), let token = value.content.string() {
+                // Expand vocab array if needed to accommodate this token
+                if index >= vocab.count {
+                    vocab.append(contentsOf: Array(repeating: "", count: index - vocab.count + 1))
+                }
+                if index < vocab.count {
+                    vocab[index] = token
+                }
             }
         }
         
