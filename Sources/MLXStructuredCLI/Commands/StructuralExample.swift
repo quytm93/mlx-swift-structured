@@ -36,7 +36,12 @@ struct StructuralExample: AsyncParsableCommand {
         }
         let prompt = "Is it true that London is a capital of a Great Britain?"
         let input = try await context.processor.prepare(input: UserInput(prompt: prompt))
-        let result = try await MLXStructured.generate(input: input, context: context, grammar: grammar)
-        print("Generation result:", result.output)
+        let stream = try await generate(input: input, context: context, grammar: grammar)
+        print("Generation:", terminator: " ")
+        for await generation in stream {
+            if let chunk = generation.chunk {
+                print(chunk, terminator: "")
+            }
+        }
     }
 }

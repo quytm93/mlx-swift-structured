@@ -89,7 +89,17 @@ struct ToolCallingExample: AsyncParsableCommand {
         }
         let prompt = "Check the weather in Paris."
         let input = try await context.processor.prepare(input: UserInput(prompt: prompt, tools: tools.map(\.schema)))
-        let result = try await MLXStructured.generate(input: input, context: context, grammar: grammar)
-        print("Generation result:", result.output)
+        let stream = try await generate(input: input, context: context, grammar: grammar)
+        print("Generation:", terminator: " ")
+        for await generation in stream {
+            switch generation {
+            case .chunk(let chunk):
+                print(chunk, terminator: "")
+            case .toolCall(let toolCall):
+                print("\nTool call:", toolCall)
+            case .info(let info):
+                print(info.summary())
+            }
+        }
     }
 }
