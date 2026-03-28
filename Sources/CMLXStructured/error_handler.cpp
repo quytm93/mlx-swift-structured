@@ -6,7 +6,7 @@ extern "C" void set_error_handler(error_handler_closure error_handler) {
     _error_handler = error_handler;
 }
 
-extern "C" void catch_error(const char* error_message) {
+extern "C" void catch_error(const char *error_message) {
     if (_error_handler) {
         _error_handler(error_message);
     }
