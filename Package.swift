@@ -56,6 +56,7 @@ let package = Package(
             dependencies: [
                 .target(name: "MLXStructured"),
                 .product(name: "MLXLLM", package: "mlx-swift-lm"),
+                .product(name: "MLXVLM", package: "mlx-swift-lm"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ],
         ),

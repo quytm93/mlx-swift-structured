@@ -8,6 +8,7 @@
 import ArgumentParser
 import MLXLMCommon
 import MLXLLM
+import MLXVLM
 import Hub
 
 @main
@@ -34,10 +35,14 @@ struct ModelArguments: ParsableArguments {
     @Option
     var revision: String = "main"
 
+    @Flag
+    var vlm: Bool = false
+
     func modelContext() async throws -> ModelContext {
         let hub = HubApi(useOfflineMode: false)
         let configuration = ModelConfiguration(id: id, revision: revision, extraEOSTokens: ["<end_of_turn>", "<|end|>"])
-        return try await LLMModelFactory.shared.load(hub: hub, configuration: configuration) { progress in
+        let factory: ModelFactory = vlm ? VLMModelFactory.shared : LLMModelFactory.shared
+        return try await factory.load(hub: hub, configuration: configuration) { progress in
             print("Loading model: \(progress.fractionCompleted.formatted(.percent))")
         }
     }
