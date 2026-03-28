@@ -25,7 +25,9 @@ public final class GrammarMaskedLogitProcessor: LogitProcessor, @unchecked Senda
     }
 
     public func didSample(token: MLXArray) {
-        grammarMatcher.advance(token: token)
+        if !grammarMatcher.isTerminated() {
+            grammarMatcher.advance(token: token)
+        }
     }
 
     private func normalizedMask(for logits: MLXArray) -> MLXArray {
