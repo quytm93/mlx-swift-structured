@@ -4,10 +4,11 @@ IndentWidth: 4
 ContinuationIndentWidth: 4
 
 ColumnLimit: 100
-AlignAfterOpenBracket: AlwaysBreak
-PenaltyBreakBeforeFirstCallParameter: 1
+BreakAfterReturnType: None
+PenaltyReturnTypeOnItsOwnLine: 1000
+AlignAfterOpenBracket: BlockIndent
 
 BinPackArguments: false
-BinPackParameters: OnePerLine
+BinPackParameters: false
 AllowAllArgumentsOnNextLine: false
 AllowAllParametersOfDeclarationOnNextLine: false

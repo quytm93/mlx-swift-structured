@@ -4,13 +4,17 @@
 
 using namespace xgrammar;
 
-extern "C" void *
-compile_ebnf_grammar(void *tokenizer_info, const char *ebnf_utf8, size_t ebnf_len) {
+extern "C" void *compile_ebnf_grammar(
+    void *tokenizer_info,
+    const char *ebnf_utf8,
+    size_t ebnf_len
+) {
     try {
         const std::string ebnf(ebnf_utf8, ebnf_len);
         auto &tokenizer_info_ptr = *static_cast<TokenizerInfo *>(tokenizer_info);
         auto *compiled_grammar_ptr = new CompiledGrammar(
-            GrammarCompiler(tokenizer_info_ptr).CompileGrammar(Grammar::FromEBNF(ebnf)));
+            GrammarCompiler(tokenizer_info_ptr).CompileGrammar(Grammar::FromEBNF(ebnf))
+        );
         return compiled_grammar_ptr;
     } catch (const std::exception &e) {
         catch_error(e.what());
@@ -18,8 +22,11 @@ compile_ebnf_grammar(void *tokenizer_info, const char *ebnf_utf8, size_t ebnf_le
     }
 }
 
-extern "C" void *
-compile_regex_grammar(void *tokenizer_info, const char *regex_utf8, size_t regex_len) {
+extern "C" void *compile_regex_grammar(
+    void *tokenizer_info,
+    const char *regex_utf8,
+    size_t regex_len
+) {
     try {
         const std::string regex(regex_utf8, regex_len);
         auto &tokenizer_info_ptr = *static_cast<TokenizerInfo *>(tokenizer_info);
@@ -36,7 +43,8 @@ extern "C" void *compile_json_schema_grammar(
     void *tokenizer_info,
     const char *schema_utf8,
     size_t schema_len,
-    int indent) {
+    int indent
+) {
     try {
         const std::string schema(schema_utf8, schema_len);
         const std::optional<int> opt_indent =
@@ -44,7 +52,8 @@ extern "C" void *compile_json_schema_grammar(
         auto &tokenizer_info_ptr = *static_cast<TokenizerInfo *>(tokenizer_info);
         auto *compiled_grammar_ptr = new CompiledGrammar(
             GrammarCompiler(tokenizer_info_ptr)
-                .CompileJSONSchema(schema, false, opt_indent, std::nullopt, true, std::nullopt));
+                .CompileJSONSchema(schema, false, opt_indent, std::nullopt, true, std::nullopt)
+        );
         return compiled_grammar_ptr;
     } catch (const std::exception &e) {
         catch_error(e.what());
@@ -55,12 +64,14 @@ extern "C" void *compile_json_schema_grammar(
 extern "C" void *compile_structural_tag(
     void *tokenizer_info,
     const char *structural_tag_utf8,
-    size_t structural_tag_len) {
+    size_t structural_tag_len
+) {
     try {
         const std::string structural_tag(structural_tag_utf8, structural_tag_len);
         auto &tokenizer_info_ptr = *static_cast<TokenizerInfo *>(tokenizer_info);
         auto *compiled_grammar_ptr = new CompiledGrammar(
-            GrammarCompiler(tokenizer_info_ptr).CompileStructuralTag(structural_tag));
+            GrammarCompiler(tokenizer_info_ptr).CompileStructuralTag(structural_tag)
+        );
         return compiled_grammar_ptr;
     } catch (const std::exception &e) {
         catch_error(e.what());
