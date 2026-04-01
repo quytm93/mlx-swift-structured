@@ -66,3 +66,105 @@ struct CodableExample: AsyncParsableCommand {
         print("Generated model:", model)
     }
 }
+
+struct BenchmarkCommand: AsyncParsableCommand {
+
+    static let configuration = CommandConfiguration(
+        commandName: "benchmark",
+        abstract: "Benchmark generation with and without constrained decoding."
+    )
+
+    @Option(help: "Number of warmup iterations to discard.")
+    var warmupSteps: Int = 3
+
+    @Option(help: "Number of benchmark iterations to measure.")
+    var benchmarkSteps: Int = 10
+
+    @OptionGroup
+    var model: ModelArguments
+
+    func run() async throws {
+        let context = try await model.modelContext()
+        let prompt = MovieRecord.instruction + "\n" + MovieRecord.sample
+        let input = try await context.processor.prepare(input: UserInput(prompt: prompt))
+        let parameters = GenerateParameters(
+            maxTokens: 69,  // Exact output JSON length with greedy decoding
+            temperature: 0.0
+        )
+
+        print("\nStarting benchmark with default generation...")
+        try await benchmark(label: "Default") {
+            let stream = try generate(input: input, parameters: parameters, context: context)
+            return
+                await stream
+                .compactMap(\.info)
+                .first { _ in true }
+                .unsafelyUnwrapped
+        }
+
+        print("\nStarting benchmark with constrained generation...")
+        try await benchmark(label: "Constrained") {
+            let grammar = try Grammar.schema(MovieRecord.schema, indent: 2)
+            let stream = try await generate(input: input, parameters: parameters, context: context, grammar: grammar)
+            return
+                await stream
+                .compactMap(\.info)
+                .first { _ in true }
+                .unsafelyUnwrapped
+        }
+    }
+
+    func benchmark(
+        label: String,
+        processing: () async throws -> GenerateCompletionInfo
+    ) async throws {
+        for i in 0..<warmupSteps {
+            print("Warmup \(i + 1)/\(warmupSteps)...")
+            _ = try await processing()
+        }
+
+        let clock = ContinuousClock()
+        let start = clock.now
+        var results = [GenerateCompletionInfo]()
+        for i in 0..<benchmarkSteps {
+            print("Benchmark \(i + 1)/\(benchmarkSteps)...")
+            let result = try await processing()
+            results.append(result)
+        }
+
+        let totalDuration = clock.now - start
+        let promptTokensPerSecond = results.map(\.promptTokensPerSecond)
+        let generationTokensPerSecond = results.map(\.tokensPerSecond)
+        print("\n\(label) total duration: \(totalDuration.readable)")
+        print("\(label) prompt tokens: \(results[0].promptTokenCount)")
+        print("\(label) generated tokens: \(results[0].generationTokenCount)")
+        print("\(label) prompt: \(promptTokensPerSecond.median.short) ± \(promptTokensPerSecond.std.short) t/s")
+        print("\(label) generation: \(generationTokensPerSecond.median.short) ± \(generationTokensPerSecond.std.short) t/s")
+    }
+}
+
+extension Array where Element: BinaryFloatingPoint {
+    var std: Element {
+        let mean = reduce(0, +) / Element(count)
+        let variance = map { ($0 - mean) * ($0 - mean) }.reduce(0, +) / Element(count)
+        return Element(sqrt(Double(variance)))
+    }
+}
+
+extension Array where Element: Comparable {
+    var median: Element {
+        sorted()[count / 2]
+    }
+}
+
+extension Duration {
+    var readable: String {
+        formatted(.units(allowed: [.seconds, .milliseconds]))
+    }
+}
+
+extension Double {
+    var short: String {
+        formatted(.number.precision(.fractionLength(1)))
+    }
+}
