@@ -66,9 +66,3 @@ import MLX
     print("Constrained duration: \(constrainedDuration)")
     print("Constrained decoding slower by \(slowdown.formatted(.percent))")
 }
-
-struct ArgMaxSampler: LogitSampler {
-    func sample(logits: MLXArray) -> MLXArray {
-        argMax(logits, axis: -1)
-    }
-}
