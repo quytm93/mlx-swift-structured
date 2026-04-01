@@ -15,6 +15,7 @@ import MLXLMCommon
     @available(macOS 26.0, iOS 26.0, *)
     public func generate<Content: Generable>(
         input: LMInput,
+        cache: [KVCache]? = nil,
         parameters: GenerateParameters = GenerateParameters(),
         context: ModelContext,
         generating: Content.Type
@@ -22,6 +23,7 @@ import MLXLMCommon
         let grammar = try Grammar.generable(Content.self)
         let iterator = try await makeGrammarIterator(
             input: input,
+            cache: cache,
             parameters: parameters,
             context: context,
             grammar: grammar
@@ -51,6 +53,7 @@ import MLXLMCommon
     @available(macOS 26.0, iOS 26.0, *)
     public func generatePartially<Content: Generable>(
         input: LMInput,
+        cache: [KVCache]? = nil,
         parameters: GenerateParameters = GenerateParameters(),
         context: ModelContext,
         generating: Content.Type,
@@ -59,6 +62,7 @@ import MLXLMCommon
         let grammar = try Grammar.generable(Content.self, indent: indent)
         let iterator = try await makeGrammarIterator(
             input: input,
+            cache: cache,
             parameters: parameters,
             context: context,
             grammar: grammar

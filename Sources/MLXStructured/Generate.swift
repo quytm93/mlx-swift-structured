@@ -12,6 +12,7 @@ import MLX
 
 func makeGrammarIterator(
     input: LMInput,
+    cache: [KVCache]?,
     parameters: GenerateParameters,
     context: ModelContext,
     grammar: Grammar
@@ -21,19 +22,24 @@ func makeGrammarIterator(
     return try TokenIterator(
         input: input,
         model: context.model,
+        cache: cache,
         processor: processor,
-        sampler: sampler
+        sampler: sampler,
+        prefillStepSize: parameters.prefillStepSize,
+        maxTokens: parameters.maxTokens
     )
 }
 
 public func generate(
     input: LMInput,
+    cache: [KVCache]? = nil,
     parameters: GenerateParameters = GenerateParameters(),
     context: ModelContext,
     grammar: Grammar
 ) async throws -> AsyncStream<Generation> {
     let iterator = try await makeGrammarIterator(
         input: input,
+        cache: cache,
         parameters: parameters,
         context: context,
         grammar: grammar
@@ -49,12 +55,14 @@ public func generate(
 
 public func generateTokens(
     input: LMInput,
+    cache: [KVCache]? = nil,
     parameters: GenerateParameters = GenerateParameters(),
     context: ModelContext,
     grammar: Grammar
 ) async throws -> AsyncStream<TokenGeneration> {
     let iterator = try await makeGrammarIterator(
         input: input,
+        cache: cache,
         parameters: parameters,
         context: context,
         grammar: grammar
@@ -70,6 +78,7 @@ public func generateTokens(
 
 public func generate<Content: Decodable>(
     input: LMInput,
+    cache: [KVCache]? = nil,
     parameters: GenerateParameters = GenerateParameters(),
     context: ModelContext,
     schema: JSONSchema,
@@ -79,6 +88,7 @@ public func generate<Content: Decodable>(
     let grammar = try Grammar.schema(schema)
     let iterator = try await makeGrammarIterator(
         input: input,
+        cache: cache,
         parameters: parameters,
         context: context,
         grammar: grammar
