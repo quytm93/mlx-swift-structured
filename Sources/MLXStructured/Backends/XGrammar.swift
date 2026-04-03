@@ -16,31 +16,49 @@ enum XGrammarError: Error {
     case unknown(String)
 }
 
-private let errorHandler = {
-    let handler = ErrorHandler()
-    set_error_handler(errorHandlerClosure)
-    return handler
-}()
+enum CErrorHandler {
 
-private let errorHandlerClosure: @convention(c) (UnsafePointer<CChar>?) -> Void = {
-    errorHandler.lastErrorMessage = $0.map {
-        String(cString: $0)
+    private static let state = State()
+
+    private static let installHandler: Void = {
+        set_error_handler(errorHandlerClosure)
+    }()
+
+    private static let errorHandlerClosure: @convention(c) (UnsafePointer<CChar>?) -> Void = {
+        state.lastErrorMessage = $0.map {
+            String(cString: $0)
+        }
     }
-}
 
-private class ErrorHandler: @unchecked Sendable {
-    let lock = NSLock()
-    var _lastErrorMessage: String? = nil
-    var lastErrorMessage: String? {
-        get { lock.withLock { _lastErrorMessage } }
-        set { lock.withLock { _lastErrorMessage = newValue } }
+    static func initialize() {
+        _ = installHandler
     }
-}
 
-private extension XGrammar {
+    static func clearLastError() {
+        state.lastErrorMessage = nil
+    }
+
     static var lastErrorMessage: String {
-        errorHandler.lastErrorMessage ?? "Unknown Error"
+        state.lastErrorMessage ?? "Unknown Error"
     }
+
+    private final class State: @unchecked Sendable {
+
+        let lock = NSLock()
+        var _lastErrorMessage: String? = nil
+
+        var lastErrorMessage: String? {
+            get { lock.withLock { _lastErrorMessage } }
+            set { lock.withLock { _lastErrorMessage = newValue } }
+        }
+    }
+}
+
+@inline(__always)
+func withCErrorHandling<T>(_ body: () throws -> T) rethrows -> T {
+    CErrorHandler.initialize()
+    CErrorHandler.clearLastError()
+    return try body()
 }
 
 final class XGrammar {
@@ -57,17 +75,18 @@ final class XGrammar {
         stopTokenIds: [Int32] = [],
         grammar: Grammar
     ) throws {
-        let _ = errorHandler  // Start capturing errors
         let vocab = vocab.map { strdup($0) }
-        let tokenizerInfo = vocab.map({ UnsafePointer($0) }).withUnsafeBufferPointer { vocabBuffer in
-            stopTokenIds.withUnsafeBufferPointer { stopTokenIdsBuffer in
-                tokenizer_info_new(
-                    vocabBuffer.baseAddress,
-                    vocabBuffer.count,
-                    vocabType,
-                    stopTokenIdsBuffer.baseAddress,
-                    stopTokenIdsBuffer.count
-                )
+        let tokenizerInfo = withCErrorHandling {
+            vocab.map({ UnsafePointer($0) }).withUnsafeBufferPointer { vocabBuffer in
+                stopTokenIds.withUnsafeBufferPointer { stopTokenIdsBuffer in
+                    tokenizer_info_new(
+                        vocabBuffer.baseAddress,
+                        vocabBuffer.count,
+                        vocabType,
+                        stopTokenIdsBuffer.baseAddress,
+                        stopTokenIdsBuffer.count
+                    )
+                }
             }
         }
 
@@ -79,23 +98,23 @@ final class XGrammar {
         }
 
         guard let tokenizerInfo else {
-            throw XGrammarError.invalidVocab(XGrammar.lastErrorMessage)
+            throw XGrammarError.invalidVocab(CErrorHandler.lastErrorMessage)
         }
 
-        let compiledGrammar =
+        let compiledGrammar = try withCErrorHandling {
             switch grammar {
             case _ where grammar.raw.isEmpty:
                 throw XGrammarError.emptyGrammar
             case .ebnf(let ebnf):
-                ebnf.utf8CString.withUnsafeBufferPointer {
+                return ebnf.utf8CString.withUnsafeBufferPointer {
                     compile_ebnf_grammar(tokenizerInfo, $0.baseAddress, $0.count)
                 }
             case .regex(let regex):
-                regex.utf8CString.withUnsafeBufferPointer {
+                return regex.utf8CString.withUnsafeBufferPointer {
                     compile_regex_grammar(tokenizerInfo, $0.baseAddress, $0.count)
                 }
             case .schema(let schema, let options):
-                schema.utf8CString.withUnsafeBufferPointer { schemaBuffer in
+                return schema.utf8CString.withUnsafeBufferPointer { schemaBuffer in
                     let separators = options.separators
                     var compileOptions = json_schema_compile_options_t(
                         indent: Int32(options.indent ?? -1),
@@ -136,17 +155,18 @@ final class XGrammar {
                         )
                 }
             case .structural(let tag):
-                tag.utf8CString.withUnsafeBufferPointer {
+                return tag.utf8CString.withUnsafeBufferPointer {
                     compile_structural_tag(tokenizerInfo, $0.baseAddress, $0.count)
                 }
             }
+        }
 
         defer {
             compiled_grammar_free(compiledGrammar)
         }
 
         guard let compiledGrammar else {
-            throw XGrammarError.invalidGrammar(XGrammar.lastErrorMessage)
+            throw XGrammarError.invalidGrammar(CErrorHandler.lastErrorMessage)
         }
 
         var bitmap = [Float](repeating: 0, count: 256 * 8)
@@ -156,8 +176,8 @@ final class XGrammar {
             }
         }
 
-        guard let grammarMatcher = grammar_matcher_new(compiledGrammar) else {
-            throw XGrammarError.unknown(XGrammar.lastErrorMessage)
+        guard let grammarMatcher = withCErrorHandling({ grammar_matcher_new(compiledGrammar) }) else {
+            throw XGrammarError.unknown(CErrorHandler.lastErrorMessage)
         }
 
         self.vocabSize = vocab.count
