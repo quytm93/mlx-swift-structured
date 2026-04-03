@@ -167,6 +167,15 @@ final class XGrammar {
         self.grammarMatcher = grammarMatcher
     }
 
+    convenience init(tokenizerInfo: TokenizerInfo, grammar: Grammar) throws {
+        try self.init(
+            vocab: tokenizerInfo.vocab,
+            vocabType: tokenizerInfo.vocabType,
+            stopTokenIds: tokenizerInfo.stopTokenIds,
+            grammar: grammar
+        )
+    }
+
     deinit {
         bitmask.data?.deallocate()
         bitmask.shape?.deallocate()

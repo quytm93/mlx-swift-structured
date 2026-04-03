@@ -8,22 +8,29 @@
 import MLXLMCommon
 import Hub
 
-private func configuredVocabSize(from modelConfig: Config?) -> Int {
-    [
-        modelConfig?.vocabSize.integer(),
-        modelConfig?.textConfig.vocabSize.integer(),
-        modelConfig?.textConfiguration.vocabSize.integer(),
-    ]
-    .compactMap { $0 }
-    .max() ?? 0
-}
+extension GrammarMaskedLogitProcessor {
 
-public extension GrammarMaskedLogitProcessor {
-    static func from(
+    static let tokenizerInfoCache = Cache<ModelConfiguration, TokenizerInfo>()
+
+    public static func from(
         hub: HubApi = .shared,  // TODO: Request changes in swift-transformers to make the tokenizer vocab (and some other properties) public
         configuration: ModelConfiguration,
         grammar: Grammar
     ) async throws -> GrammarMaskedLogitProcessor {
+        let tokenizerInfo = try await tokenizerInfo(for: configuration, hub: hub)
+        let grammarMatcher = try XGrammar(tokenizerInfo: tokenizerInfo, grammar: grammar)
+        let processor = GrammarMaskedLogitProcessor(grammarMatcher: grammarMatcher)
+        return processor
+    }
+
+    private static func tokenizerInfo(
+        for configuration: ModelConfiguration,
+        hub: HubApi
+    ) async throws -> TokenizerInfo {
+        if let cached = await tokenizerInfoCache.value(for: configuration) {
+            return cached
+        }
+
         let configurations =
             switch configuration.id {
             case .id(let id, let revision):
@@ -38,25 +45,48 @@ public extension GrammarMaskedLogitProcessor {
             configurations.tokenizerData
         )
 
-        let tokenizerEntries = tokenizerData.model.vocab.dictionary(or: [:])
-        let addedTokens = tokenizerData.addedTokens.array(or: [])
-        let tokenizerIDs = tokenizerEntries.compactMap { $0.value.integer() }
-        let addedTokenIDs = addedTokens.compactMap { $0.id.integer() }
-        let configuredVocabSize = configuredVocabSize(from: modelConfig)
-        let derivedVocabSize = (tokenizerIDs + addedTokenIDs).max().map { $0 + 1 } ?? 0
+        let modelVocab: [(token: String, id: Int)] = tokenizerData
+            .model.vocab.dictionary(or: [:])
+            .compactMap { key, value in
+                if let id = value.integer() {
+                    return (token: key.string, id: id)
+                } else {
+                    return nil
+                }
+            }
+
+        let addedTokens: [(token: String, id: Int)] = tokenizerData
+            .addedTokens.array(or: [])
+            .compactMap { value in
+                if let id = value.id.integer(), let token = value.content.string() {
+                    return (token: token, id: id)
+                } else {
+                    return nil
+                }
+            }
+
+        let configuredVocabSize =
+            [
+                modelConfig?.vocabSize.integer(),
+                modelConfig?.textConfig.vocabSize.integer(),
+                modelConfig?.textConfiguration.vocabSize.integer(),
+            ]
+            .compactMap { $0 }
+            .max() ?? 0
+
+        let derivedVocabSize =
+            [
+                modelVocab.map(\.id).max(),
+                addedTokens.map(\.id).max(),
+            ]
+            .compactMap { $0 }
+            .map { $0 + 1 }
+            .max() ?? 0
+
         let vocabSize = max(configuredVocabSize, derivedVocabSize)
         var vocab = Array(repeating: "", count: vocabSize)
-
-        for (key, value) in tokenizerEntries {
-            if let index = value.integer(), vocab.indices.contains(index) {
-                vocab[index] = key.string
-            }
-        }
-
-        for value in addedTokens {
-            if let index = value.id.integer(), let token = value.content.string(), vocab.indices.contains(index) {
-                vocab[index] = token
-            }
+        for (token, id) in (modelVocab + addedTokens) where vocab.indices.contains(id) {
+            vocab[id] = token
         }
 
         let decoders: [Config] =
@@ -86,13 +116,34 @@ public extension GrammarMaskedLogitProcessor {
             stopTokenIds.append(Int32(eosTokenId))
         }
 
-        //        print("Vocab size:", vocab.count)
-        //        print("Vocab type:", vocabType)
-        //        print("Stop tokens Ids:", stopTokenIds)
-        //        print("Grammar:", grammar)
+        let tokenizerInfo = TokenizerInfo(vocab: vocab, vocabType: vocabType, stopTokenIds: stopTokenIds)
+        await tokenizerInfoCache.set(tokenizerInfo, for: configuration)
+        return tokenizerInfo
+    }
+}
 
-        let grammarMatcher = try XGrammar(vocab: vocab, vocabType: vocabType, stopTokenIds: stopTokenIds, grammar: grammar)
-        let processor = GrammarMaskedLogitProcessor(grammarMatcher: grammarMatcher)
-        return processor
+extension ModelConfiguration: @retroactive Hashable {
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(tokenizerId)
+        hasher.combine(overrideTokenizer)
+        hasher.combine(defaultPrompt)
+        hasher.combine(extraEOSTokens)
+        hasher.combine(eosTokenIds)
+        hasher.combine(toolCallFormat?.rawValue)
+    }
+}
+
+extension ModelConfiguration.Identifier: @retroactive Hashable {
+    public func hash(into hasher: inout Hasher) {
+        switch self {
+        case .id(let id, let revision):
+            hasher.combine(0)
+            hasher.combine(id)
+            hasher.combine(revision)
+        case .directory(let directory):
+            hasher.combine(1)
+            hasher.combine(directory.path)
+        }
     }
 }
