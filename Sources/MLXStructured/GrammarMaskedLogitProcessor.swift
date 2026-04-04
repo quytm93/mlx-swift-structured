@@ -10,42 +10,44 @@ import MLX
 
 public final class GrammarMaskedLogitProcessor: LogitProcessor, @unchecked Sendable {
 
-    public let grammarMatcher: GrammarMatcher
+    let grammarMatcher: GrammarMatcher
+    var pendingToken: MLXArray?
 
     public init(grammarMatcher: GrammarMatcher) {
         self.grammarMatcher = grammarMatcher
     }
 
     public func prompt(_ prompt: MLXArray) {
+        pendingToken = nil
         grammarMatcher.reset()
     }
 
     public func process(logits: MLXArray) -> MLXArray {
-        return logits + normalizedMask(for: logits)
-    }
-
-    public func didSample(token: MLXArray) {
-        if !grammarMatcher.isTerminated() {
+        if let token = pendingToken {
+            pendingToken = nil
             grammarMatcher.advance(token: token)
         }
-    }
 
-    private func normalizedMask(for logits: MLXArray) -> MLXArray {
         let mask = grammarMatcher.nextTokenMask()
-        guard let logitsWidth = logits.shape.last else {
-            return mask
-        }
+        let maskWidth = mask.dim(-1)
+        let logitsWidth = logits.dim(-1)
 
-        let maskWidth = mask.size
         if maskWidth == logitsWidth {
-            return mask
+            return logits + mask
         }
 
         if maskWidth < logitsWidth {
             let padding = full([logitsWidth - maskWidth], values: -Float.infinity)
-            return concatenated([mask, padding])
+            let mask = concatenated([mask, padding])
+            return logits + mask
         }
 
-        return mask[0..<logitsWidth]
+        return logits + mask[0..<logitsWidth]
+    }
+
+    public func didSample(token: MLXArray) {
+        if !grammarMatcher.isTerminated() {
+            pendingToken = token
+        }
     }
 }
