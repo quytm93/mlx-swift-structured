@@ -20,6 +20,7 @@ struct RootCommand: AsyncParsableCommand {
         subcommands: [
             BenchmarkCommand.self,
             CodableExample.self,
+            CodableStreamExample.self,
             GenerableExample.self,
             GenerableStreamExample.self,
             StructuralExample.self,
@@ -31,7 +32,7 @@ struct RootCommand: AsyncParsableCommand {
 struct ModelArguments: ParsableArguments {
 
     @Option
-    var id: String = "Qwen/Qwen3-1.7B-MLX-4bit"
+    var id: String = "mlx-community/Qwen3-0.6B-4bit"
 
     @Option
     var revision: String = "main"

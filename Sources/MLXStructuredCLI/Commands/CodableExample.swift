@@ -67,6 +67,37 @@ struct CodableExample: AsyncParsableCommand {
     }
 }
 
+struct CodableStreamExample: AsyncParsableCommand {
+
+    static let configuration = CommandConfiguration(
+        commandName: "codable-stream",
+        abstract: "Generate codable content according to JSON Schema."
+    )
+
+    @OptionGroup
+    var model: ModelArguments
+
+    func run() async throws {
+        let context = try await model.modelContext()
+        let prompt = MovieRecord.instruction + "\n" + MovieRecord.sample
+        let input = try await context.processor.prepare(input: UserInput(prompt: prompt))
+        let stream = try await generate(input: input, context: context, schema: MovieRecord.schema, options: .init(whitespace: .indent(2)))
+        print("Output:", terminator: " ")
+        fflush(stdout)
+        for await generation in stream {
+            switch generation {
+            case .chunk(let chunk):
+                print(chunk, terminator: "")
+                fflush(stdout)
+            case .toolCall(let toolCall):
+                print("\nTool call:", toolCall)
+            case .info(let info):
+                print("\n\n\(info.summary())")
+            }
+        }
+    }
+}
+
 struct BenchmarkCommand: AsyncParsableCommand {
 
     static let configuration = CommandConfiguration(

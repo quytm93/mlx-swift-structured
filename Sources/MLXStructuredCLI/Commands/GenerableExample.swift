@@ -84,9 +84,10 @@ struct GenerableStreamExample: AsyncParsableCommand {
         let context = try await model.modelContext()
         let prompt = MovieRecord.instruction + "\n" + MovieRecord.sample
         let input = try await context.processor.prepare(input: UserInput(prompt: prompt))
-        let stream = try await generatePartially(input: input, context: context, generating: MovieRecord.self)
-        for await content in stream {
+        let stream = try await generate(input: input, context: context, partially: MovieRecord.self)
+        for try await content in stream {
             print("Partially generated:", content)
+            fflush(stdout)
         }
     }
 }

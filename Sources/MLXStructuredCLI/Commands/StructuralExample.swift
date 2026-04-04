@@ -37,10 +37,17 @@ struct StructuralExample: AsyncParsableCommand {
         let prompt = "Is it true that London is a capital of a Great Britain?"
         let input = try await context.processor.prepare(input: UserInput(prompt: prompt))
         let stream = try await generate(input: input, context: context, grammar: grammar)
-        print("Generation:", terminator: " ")
+        print("Output:", terminator: " ")
+        fflush(stdout)
         for await generation in stream {
-            if let chunk = generation.chunk {
+            switch generation {
+            case .chunk(let chunk):
                 print(chunk, terminator: "")
+                fflush(stdout)
+            case .toolCall(let toolCall):
+                print("\nTool call:", toolCall)
+            case .info(let info):
+                print("\n\n\(info.summary())")
             }
         }
     }
