@@ -12,6 +12,45 @@
     import MLXLMCommon
 
     @available(macOS 26.0, iOS 26.0, *)
+    /// Generates a Foundation Models `Generable` value.
+    ///
+    /// Use this overload to produce a fully validated structured value from a
+    /// type that conforms to `Generable`.
+    ///
+    /// ```swift
+    /// @Generable
+    /// struct MovieRecord {
+    ///
+    ///     @Guide(description: "Movie title")
+    ///     let title: String
+    ///
+    ///     @Guide(description: "Release year")
+    ///     let year: Int
+    ///
+    ///     @Guide(description: "Director name")
+    ///     let director: String
+    /// }
+    ///
+    /// let input = try await context.processor.prepare(
+    ///     input: UserInput(
+    ///         prompt: "Extract a movie record from: The Dark Knight (2008) was directed by Christopher Nolan."
+    ///     )
+    /// )
+    ///
+    /// let movie = try await generate(
+    ///     input: input,
+    ///     context: context,
+    ///     generating: MovieRecord.self
+    /// )
+    /// ```
+    ///
+    /// - Parameters:
+    ///   - input: language model input.
+    ///   - cache: optional KV cache to continue generation from a previous state.
+    ///   - parameters: configuration options for token generation.
+    ///   - context: model context containing the model, tokenizer, and configuration.
+    ///   - generating: `Generable` type to produce.
+    /// - Returns: the generated structured value.
     public func generate<Content: Generable>(
         input: LMInput,
         cache: [KVCache]? = nil,
@@ -35,6 +74,40 @@
     }
 
     @available(macOS 26.0, iOS 26.0, *)
+    /// Generates partial updates for a Foundation Models `Generable` value.
+    ///
+    /// This is useful for progressively rendering structured output while the
+    /// model is still generating.
+    ///
+    /// ```swift
+    /// @Generable
+    /// struct EmailAddress {
+    ///     @Guide(description: "A valid email address")
+    ///     let email: String
+    /// }
+    ///
+    /// let input = try await context.processor.prepare(
+    ///     input: UserInput(prompt: "Return a support email address.")
+    /// )
+    ///
+    /// let stream = try await generate(
+    ///     input: input,
+    ///     context: context,
+    ///     partially: EmailAddress.self
+    /// )
+    ///
+    /// for try await partial in stream {
+    ///     print(partial)
+    /// }
+    /// ```
+    ///
+    /// - Parameters:
+    ///   - input: language model input.
+    ///   - cache: optional KV cache to continue generation from a previous state.
+    ///   - parameters: configuration options for token generation.
+    ///   - context: model context containing the model, tokenizer, and configuration.
+    ///   - partially: `Generable` type whose partial representation should be streamed.
+    /// - Returns: an async sequence of partial structured updates.
     public func generate<Content: Generable>(
         input: LMInput,
         cache: [KVCache]? = nil,
