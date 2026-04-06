@@ -8,7 +8,7 @@ To use MLX Structured in your project, add the following to your `Package.swift`
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/petrukha-ivan/mlx-swift-structured", from: "0.0.2")
+    .package(url: "https://github.com/petrukha-ivan/mlx-swift-structured", from: "0.1.0")
 ]
 ```
 
@@ -45,7 +45,7 @@ Starting with macOS 26 and iOS 26, you can use a `@Generable` type as a grammar 
 
 ```swift
 @Generable
-struct PersonInfo {
+struct PersonInfo: Codable {
     
     @Guide(description: "Person name")
     let name: String
@@ -110,26 +110,58 @@ let grammar = try Grammar {
 
 ### Generation
 
-To use a defined grammar during text generation, use the convenient `generate` method:
+To use a defined grammar during text generation, use the convenient `generate` method. These overloads are fully compatible with MLXLM generation APIs, with the grammar passed as an additional argument:
 
 ```swift
-let result = try await generate(input: input, context: context, grammar: grammar)
-print(result.output) // Generated text
+let stream = try await generate(
+    input: input, 
+    context: context, 
+    grammar: grammar
+)
+
+for await generation in stream {
+    switch generation {
+    case .chunk(let chunk):
+        print(chunk, terminator: "")
+    case .toolCall(let toolCall):
+        // Handle tool call
+    case .info(let info):
+        // Handle completion info
+    }
+}
 ```
 
-You can also pass a `Generable` type as an argument to generate it:
+You can also decode constrained JSON output into a `Decodable` type:
 
 ```swift
-let (result, model) = try await generate(input: input, context: context, generating: PersonInfo.self)
-print(result.output) // Generated text
-print(model) // Generated model
+let model = try await generate(
+    input: input, 
+    context: context, 
+    schema: schema,
+    generating: PersonInfo.self
+)
 ```
 
-With a `Generable` type, you can use streaming generation, which returns `PartiallyGenerated` content for your type:
+With a `Generable` type, you can generate a validated value directly:
 
 ```swift
-let stream = try await generate(input: input, context: context, generating: PersonInfo.self)
-for await content in stream {
+let model = try await generate(
+    input: input, 
+    context: context,
+    generating: PersonInfo.self
+)
+```
+
+You can also stream partial `Generable` updates, which return `PartiallyGenerated` content for your type:
+
+```swift
+let stream = try await generate(
+    input: input, 
+    context: context, 
+    partially: PersonInfo.self
+)
+
+for try await content in stream {
     print("Partially generated:", content)
 }
 ```
@@ -147,23 +179,23 @@ You can find more usage examples in the `MLXStructuredCLI` target and in the uni
 
 ### Performance
 
-In synthetic tests with the Llama model and a vocabulary of 60,000 tokens, the performance drop was less than 10%. However, with real models, the results are worse. In practice, you can expect generation speed to be about 15% slower.
-The exact slowdown depends on the model, vocabulary size, and the complexity of your grammar.
+In synthetic tests with the Llama model, a simple grammar, and a vocabulary of 60,000 tokens, the performance drop was less than 3%. However, with real models and more complex grammars, the results are slightly worse. In practice, you can expect generation speed to be no more than 10% slower. The exact slowdown depends on the model, vocabulary size, and the complexity of your grammar.
 
 | Model | Vocab Size | Plain (tokens/s) | Constrained (tokens/s) |
 | - | - | - | - |
-| Qwen3 4B | 151,936 | 102 | 87 |
-| Llama3.2 3B | 128,256 | 131 | 109 |
-| Gemma3 270M | 262,144 | 186 | 160 |
-
-These results show that while constrained decoding adds some overhead, it still remains fast enough for practical use.
+| Qwen3 4B | 151,936 | 100 | 94 (6.0% slower) |
+| Qwen3 14B | 151,936 | 33 | 32 (3.0% slower) |
+| Llama3.2 1B | 128,256 | 295 | 268 (9.2% slower) |
+| Llama3.2 3B | 128,256 | 129 | 119 (7.8% slower) |
+| Gemma3 4B | 262,144 | 98 | 92 (6.1% slower) |
+| Gemma3 270M | 262,144 | 485 | 444 (8.5% slower) |
 
 ### Accuracy
 
-For example, given a task to extract components from text and output them in JSON format, the prompt is:
+For example, given a task to extract a movie record from text and output it in JSON format, the prompt is:
 
 ```plain
-Instruction: Extract movie record from the text, output in JSON format according to schema: \(grammar.raw)
+Instruction: Extract movie record from the text, output in JSON format according to schema: \(schema)
 Text: The Dark Knight (2008) is a superhero crime film directed by Christopher Nolan. Starring Christian Bale, Heath Ledger, and Michael Caine.
 ```
 
