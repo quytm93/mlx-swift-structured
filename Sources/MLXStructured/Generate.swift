@@ -71,7 +71,7 @@ public func generate<Content: Decodable>(
     generating: Content.Type,
     decoder: JSONDecoder = .init()
 ) async throws -> Content {
-    let grammar = try Grammar.schema(schema)
+    let grammar = try Grammar.schema(schema, options: options)
     let stream = try await generate(
         input: input,
         cache: cache,
